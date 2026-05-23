@@ -16,7 +16,7 @@ st.set_page_config(page_title="TAURX Dashboard", layout="wide", page_icon="🏃"
 # --- 1. LOGIN & AUTHENTIFIZIERUNG ---
 CLIENT_ID = st.secrets["STRAVA_CLIENT_ID"]
 CLIENT_SECRET = st.secrets["STRAVA_CLIENT_SECRET"]
-REDIRECT_URI = "http://localhost:8501"
+REDIRECT_URI = "https://taurx-app-mkgvikh6guv7o4cjrmetjm.streamlit.app"
 
 def get_login_url():
     return f"https://www.strava.com/oauth/authorize?client_id={CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&approval_prompt=force&scope=activity:read_all"
