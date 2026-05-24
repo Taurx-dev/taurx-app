@@ -100,7 +100,7 @@ else:
         st.stop()
 
     st.sidebar.title("TAURX Navigation")
-    app_mode = st.sidebar.radio("Modul wählen:", ["📅 Weekly GaEF", "🔬 Intra-Run Analyse", "🧮 Korrelationen"])
+    app_mode = st.sidebar.radio("Modul wählen:", ["📅 Weekly GaEF", "🔬 Intra-Run Analyse", "🧮 Korrelationen", "📍 Strecken-Vergleich"])
     st.sidebar.markdown("---")
 
     # ==========================================
@@ -215,67 +215,63 @@ else:
     # ==========================================
     # MODUL 4: STRECKEN-VERGLEICH (Ähnliche Läufe)
     # ==========================================
-    st.header("📍 Modul 4: Strecken-Vergleich")
-    st.markdown("Vergleiche deine Effizienz auf einer spezifischen Standard-Runde über die Zeit.")
+    elif app_mode == "📍 Strecken-Vergleich":
+        st.title("📍 Modul 4: Strecken-Vergleich")
+        st.markdown("Vergleiche deine Effizienz auf einer spezifischen Standard-Runde über die Zeit.")
 
-    # 1. Referenz-Lauf auswählen (Dropdown für den Nutzer)
-    # Wir bauen einen gut lesbaren Text für das Dropdown: "Datum - Name (Distanz)"
-    run_options = df_runs.apply(lambda row: f"{row['start_date_local'].strftime('%Y-%m-%d')} - {row['name']} ({row['distance']/1000:.1f} km)", axis=1).tolist()
-    
-    selected_run_str = st.selectbox("Wähle einen Referenz-Lauf (deine 'Standard-Runde'):", options=run_options)
-
-    # 2. Werte des gewählten Laufs extrahieren
-    selected_idx = run_options.index(selected_run_str)
-    ref_run = df_runs.iloc[selected_idx]
-
-    ref_dist = ref_run['distance']
-    ref_elev = ref_run['total_elevation_gain']
-
-    # 3. Schieberegler für die Toleranzen
-    col1, col2 = st.columns(2)
-    with col1:
-        dist_tol = st.slider("Distanz-Toleranz (+/- %)", min_value=1.0, max_value=20.0, value=5.0, step=1.0)
-    with col2:
-        elev_tol = st.slider("Höhenmeter-Toleranz (+/- %)", min_value=1.0, max_value=50.0, value=5.0, step=1.0)
-
-    # 4. Mathematische Grenzen berechnen
-    dist_min = ref_dist * (1 - dist_tol/100)
-    dist_max = ref_dist * (1 + dist_tol/100)
-
-    # Sonderfall: Wenn der Referenzlauf 0 Höhenmeter hat, würde +/- 5% immer noch 0 bleiben. 
-    # Daher geben wir flachen Strecken einen kleinen Puffer von 5 Metern.
-    if ref_elev > 0:
-        elev_min = ref_elev * (1 - elev_tol/100)
-        elev_max = ref_elev * (1 + elev_tol/100)
-    else:
-        elev_min = 0
-        elev_max = 5
-
-    # 5. Alle Läufe filtern, die in dieses Raster fallen
-    similar_runs = df_runs[
-        (df_runs['distance'] >= dist_min) & (df_runs['distance'] <= dist_max) &
-        (df_runs['total_elevation_gain'] >= elev_min) & (df_runs['total_elevation_gain'] <= elev_max)
-    ].copy()
-
-    # 6. Ergebnisse anzeigen und Plotten
-    st.write(f"**{len(similar_runs)} ähnliche Läufe gefunden** (Referenz: ~{ref_dist/1000:.1f} km, ~{ref_elev:.0f} HM)")
-
-    if len(similar_runs) > 1:
-        # Wir sortieren die Läufe chronologisch nach Datum
-        similar_runs = similar_runs.sort_values(by='start_date_local')
-
-        fig4 = px.line(
-            similar_runs,
-            x='start_date_local',
-            y='GaEF',
-            markers=True,
-            title="Entwicklung deines GaEF auf dieser Strecke",
-            labels={'start_date_local': 'Datum', 'GaEF': 'Gravity-adjusted EF'},
-            hover_data=['name', 'distance', 'total_elevation_gain', 'average_heartrate', 'average_speed']
-        )
+        # 1. Referenz-Lauf auswählen
+        run_options = df_runs.apply(lambda row: f"{row['Datum'].strftime('%Y-%m-%d')} - {row['Lauf']} ({row['Distanz_km']:.1f} km)", axis=1).tolist()
         
-        # Design-Anpassungen für den Graphen
-        fig4.update_traces(line_color='#FF4B4B', marker=dict(size=10))
-        st.plotly_chart(fig4, use_container_width=True)
-    else:
-        st.info("Nicht genug ähnliche Läufe gefunden, um einen Trend zu zeichnen. Erhöhe gegebenenfalls die Toleranzen oben in den Schiebereglern.")
+        selected_run_str = st.selectbox("Wähle einen Referenz-Lauf (deine 'Standard-Runde'):", options=run_options)
+
+        # 2. Werte des gewählten Laufs extrahieren
+        selected_idx = run_options.index(selected_run_str)
+        ref_run = df_runs.iloc[selected_idx]
+
+        ref_dist = ref_run['Distanz_km']
+        ref_elev = ref_run['Hoehenmeter']
+
+        # 3. Schieberegler für die Toleranzen
+        col1, col2 = st.columns(2)
+        with col1:
+            dist_tol = st.slider("Distanz-Toleranz (+/- %)", min_value=1.0, max_value=20.0, value=5.0, step=1.0)
+        with col2:
+            elev_tol = st.slider("Höhenmeter-Toleranz (+/- %)", min_value=1.0, max_value=50.0, value=5.0, step=1.0)
+
+        # 4. Mathematische Grenzen berechnen
+        dist_min = ref_dist * (1 - dist_tol/100)
+        dist_max = ref_dist * (1 + dist_tol/100)
+
+        if ref_elev > 0:
+            elev_min = ref_elev * (1 - elev_tol/100)
+            elev_max = ref_elev * (1 + elev_tol/100)
+        else:
+            elev_min = 0
+            elev_max = 5
+
+        # 5. Alle Läufe filtern, die in dieses Raster fallen
+        similar_runs = df_runs[
+            (df_runs['Distanz_km'] >= dist_min) & (df_runs['Distanz_km'] <= dist_max) &
+            (df_runs['Hoehenmeter'] >= elev_min) & (df_runs['Hoehenmeter'] <= elev_max)
+        ].copy()
+
+        # 6. Ergebnisse anzeigen und Plotten
+        st.write(f"**{len(similar_runs)} ähnliche Läufe gefunden** (Referenz: ~{ref_dist:.1f} km, ~{ref_elev:.0f} HM)")
+
+        if len(similar_runs) > 1:
+            similar_runs = similar_runs.sort_values(by='Datum')
+
+            fig4 = px.line(
+                similar_runs,
+                x='Datum',
+                y='GaEF',
+                markers=True,
+                title="Entwicklung deines GaEF auf dieser Strecke",
+                labels={'Datum': 'Datum', 'GaEF': 'Gravity-adjusted EF'},
+                hover_data=['Lauf', 'Distanz_km', 'Hoehenmeter', 'HR_avg', 'Speed_kmh']
+            )
+            
+            fig4.update_traces(line_color='#FF4B4B', marker=dict(size=10))
+            st.plotly_chart(fig4, use_container_width=True)
+        else:
+            st.info("Nicht genug ähnliche Läufe gefunden, um einen Trend zu zeichnen. Erhöhe gegebenenfalls die Toleranzen oben in den Schiebereglern.")
