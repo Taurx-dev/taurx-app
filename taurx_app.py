@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import urllib3
 
@@ -179,7 +179,18 @@ def load_all_runs(token):
             'Speed_kmh': speed_kmh, 'HR_avg': hr, 'HR_max': act.get('max_heartrate', hr),
             'SPM': spm, 'EF': ef, 'GaEF': gaef
         })
-    return pd.DataFrame(run_list)
+    df = pd.DataFrame(run_list)
+    
+    if not df.empty:
+        # 1. Zuerst strikt chronologisch sortieren
+        df = df.sort_values('Datum').reset_index(drop=True)
+        
+        # 2. Volumen berechnen (Der aktuelle Lauf wird dabei bewusst NICHT mitgezählt)
+        df['Vol_7d_km'] = df.apply(lambda row: df[(df['Datum'] >= (row['Datum'] - timedelta(days=7))) & (df['Datum'] < row['Datum'])]['Distanz_km'].sum(), axis=1)
+        
+        df['Vol_21d_km'] = df.apply(lambda row: df[(df['Datum'] >= (row['Datum'] - timedelta(days=21))) & (df['Datum'] < row['Datum'])]['Distanz_km'].sum(), axis=1)
+        
+    return df
 
 # --- SPRACHWAHL (Global) ---
 lang = st.sidebar.radio("🌐 Language / Sprache", ["DE", "EN"])
