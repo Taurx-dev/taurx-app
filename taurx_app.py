@@ -149,13 +149,27 @@ else:
         
         @st.cache_data(show_spinner="Lade Streams...")
         def get_streams(act_id, token):
-            res = requests.get(f"https://www.strava.com/api/v3/activities/{act_id}/streams", headers={'Authorization': f"Bearer {token}"}, params={'keys': 'distance,time,altitude,heartrate,moving', 'key_by_type': 'true'})
+            # UPDATE: 'cadence' zu den angeforderten Schlüsseln hinzugefügt
+            res = requests.get(
+                f"https://www.strava.com/api/v3/activities/{act_id}/streams", 
+                headers={'Authorization': f"Bearer {token}"}, 
+                params={'keys': 'distance,time,altitude,heartrate,moving,cadence', 'key_by_type': 'true'}
+            )
             return res.json() if res.status_code == 200 else None
             
         streams = get_streams(selected_act_id, st.session_state['access_token'])
         
         if streams and 'heartrate' in streams:
-            dist_data, time_data, alt_data, hr_data, moving_data = streams['distance']['data'], streams['time']['data'], streams['altitude']['data'], streams['heartrate']['data'], streams['moving']['data']
+            dist_data = streams['distance']['data']
+            time_data = streams['time']['data']
+            alt_data = streams['altitude']['data']
+            hr_data = streams['heartrate']['data']
+            moving_data = streams['moving']['data']
+            
+            # Prüfen, ob die Uhr Trittfrequenz-Daten aufgezeichnet hat
+            has_cadence = 'cadence' in streams
+            cadence_data = streams['cadence']['data'] if has_cadence else []
+            
             splits = []
             target_m = split_km * 1000
             start_idx = 0
@@ -168,27 +182,61 @@ else:
                         avg_hr = np.mean(seg_hr) if seg_hr else 0
                         elev = sum(alt_data[k] - alt_data[k-1] for k in range(start_idx + 1, i + 1) if alt_data[k] > alt_data[k-1] and moving_data[k])
                         seg_dist = dist_data[i] - dist_data[start_idx]
+                        
+                        # Durchschnittliche SPM (Schritte pro Minute) berechnen. Strava liefert Umdrehungen, daher * 2
+                        avg_spm = None
+                        if has_cadence:
+                            seg_cad = [cadence_data[k] for k in range(start_idx, i+1) if moving_data[k] and cadence_data[k] > 0]
+                            if seg_cad:
+                                avg_spm = np.mean(seg_cad) * 2
+                        
                         if avg_hr > 0:
                             splits.append({
-                                'KM': target_m / 1000, 'EF': (seg_dist / (mov_time / 60)) / avg_hr,
-                                'GaEF': ((seg_dist + elev * 10) / (mov_time / 60)) / avg_hr, 'HR': avg_hr
+                                'KM': target_m / 1000, 
+                                'EF': (seg_dist / (mov_time / 60)) / avg_hr,
+                                'GaEF': ((seg_dist + elev * 10) / (mov_time / 60)) / avg_hr, 
+                                'HR': avg_hr,
+                                'Elev': elev,
+                                'SPM': avg_spm
                             })
                     start_idx = i
                     target_m += split_km * 1000
                     
             if splits:
                 df_splits = pd.DataFrame(splits)
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
-                fig.add_trace(go.Scatter(x=df_splits['KM'], y=df_splits['EF'], name="EF", line=dict(color="#1f77b4", dash='dot')), secondary_y=False)
-                fig.add_trace(go.Scatter(x=df_splits['KM'], y=df_splits['GaEF'], name="GaEF", line=dict(color="#ff7f0e", width=4)), secondary_y=False)
-                fig.add_trace(go.Scatter(x=df_splits['KM'], y=df_splits['HR'], name="HR", line=dict(color="rgba(214, 39, 40, 0.4)")), secondary_y=True)
-                fig.update_layout(height=500, hovermode="x unified")
-                st.plotly_chart(fig, use_container_width=True)
+                
+                # GRAFIK 1: Effizienz
+                st.markdown("### Effizienz & Herzfrequenz")
+                fig1 = make_subplots(specs=[[{"secondary_y": True}]])
+                fig1.add_trace(go.Scatter(x=df_splits['KM'], y=df_splits['EF'], name="EF (Flach)", line=dict(color="#1f77b4", dash='dot')), secondary_y=False)
+                fig1.add_trace(go.Scatter(x=df_splits['KM'], y=df_splits['GaEF'], name="GaEF (Höhenbereinigt)", line=dict(color="#ff7f0e", width=4)), secondary_y=False)
+                fig1.add_trace(go.Scatter(x=df_splits['KM'], y=df_splits['HR'], name="HR", line=dict(color="rgba(214, 39, 40, 0.4)")), secondary_y=True)
+                fig1.update_layout(height=400, hovermode="x unified", margin=dict(b=10))
+                st.plotly_chart(fig1, use_container_width=True)
+                
+                # GRAFIK 2: SPM vs Höhenmeter
+                if has_cadence and not df_splits['SPM'].isnull().all():
+                    st.markdown("### Schrittfrequenz vs. Höhenmeter")
+                    fig2 = make_subplots(specs=[[{"secondary_y": True}]])
+                    # Balken für Höhenmeter im Hintergrund (sekundäre Achse)
+                    fig2.add_trace(go.Bar(x=df_splits['KM'], y=df_splits['Elev'], name="Höhenmeter (+)", marker_color="rgba(160,160,160,0.4)"), secondary_y=True)
+                    # Linie für SPM (primäre Achse)
+                    fig2.add_trace(go.Scatter(x=df_splits['KM'], y=df_splits['SPM'], name="SPM", mode='lines+markers', line=dict(color="#2ca02c", width=3)), secondary_y=False)
+                    
+                    fig2.update_layout(
+                        height=350, 
+                        hovermode="x unified",
+                        yaxis=dict(title="SPM (Schritte/Min)", range=[df_splits['SPM'].min() * 0.95, df_splits['SPM'].max() * 1.05]),
+                        yaxis2=dict(title="Höhenmeter (m)", showgrid=False, range=[0, df_splits['Elev'].max() * 2]) # *2 damit die Balken nur in der unteren Hälfte bleiben
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+                else:
+                    st.info("Für diesen Lauf wurden leider keine Schrittfrequenz-Daten aufgezeichnet.")
+
             else:
                 st.warning("Keine Segmente berechenbar.")
         else:
             st.warning("Keine Pulswerte für diesen Lauf.")
-
     # ==========================================
     # MODUL 3: KORRELATIONEN
     # ==========================================
