@@ -145,7 +145,7 @@ else:
         st.title("🔬 Intra-Run GaEF Analyse")
         run_options = {f"{r['Datum'].strftime('%d.%m.%Y')} - {r['Lauf']} ({r['Distanz_km']:.1f} km)": r['ID'] for _, r in df_runs.iterrows()}
         selected_act_id = run_options[st.sidebar.selectbox("Lauf wählen:", list(run_options.keys()))]
-        split_km = st.sidebar.select_slider("Segment-Länge:", options=[0.5, 1.0, 2.0, 5.0, 6.706, 10.0], value=1.0)
+        split_km = st.sidebar.select_slider("Segment-Länge:", options=[0.1,0.25,0.5, 1.0, 2.0, 5.0, 6.706, 10.0], value=1.0)
         
         @st.cache_data(show_spinner="Lade Streams...")
         def get_streams(act_id, token):
